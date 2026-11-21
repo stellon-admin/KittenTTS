@@ -14,3 +14,5 @@ Fuller detail than the [project README](../README.md), which covers getting star
 | [architecture.md](architecture.md) | What the model is, package layout, vendored components |
 | [kitten-tts-2-tiny.md](kitten-tts-2-tiny.md) | KittenTTS 2 nano, pico and mini: small multilingual int8 / int4 ONNX models |
 | [onnx-models.md](onnx-models.md) | The lightweight CPU models and their API |
+| [kittenasr.md](kittenasr.md) | Kitten-ASR: speech-to-text, its models and API |
+| [enriched-output.md](enriched-output.md) | What the enhanced ASR model reports beyond words |

@@ -32,6 +32,10 @@
 
 The library also includes our existing [**lightweight V0.8 models**](docs/onnx-models.md). Both model families load through the same `KittenTTS(...)` constructor.
 
+The same package includes [**Kitten-ASR**](#kitten-asr) for speech-to-text on CPU or GPU,
+with plain transcription and an enhanced model that also reports emotion, delivery, emphasis,
+and accent.
+
 **Commercial support is available.** For integration assistance, custom voices, or enterprise licensing, [contact us](https://docs.google.com/forms/d/e/1FAIpQLSc49erSr7jmh3H2yeqH4oZyRRuXm0ROuQdOgWguTzx6SMdUnQ/viewform?usp=preview).
 
 <img   alt="5325cae7-e2e1-4aad-8d53-caf93a268b36" src="https://raw.githubusercontent.com/KittenML/KittenTTS/main/assets/kitten_tts_2_features.png" />
@@ -50,6 +54,7 @@ The library also includes our existing [**lightweight V0.8 models**](docs/onnx-m
 - [Running on a Mac](#running-on-a-mac)
 - [Running with vLLM](#running-with-vllm)
 - [Long text and streaming](#long-text-and-streaming)
+- [Kitten-ASR](#kitten-asr)
 - [Documentation](#documentation)
 - [System Requirements](#system-requirements)
 - [Commercial Support](#commercial-support)
@@ -320,6 +325,48 @@ Two consequences worth knowing:
   without waiting for the next chunk. Concatenating streamed chunks directly gives slightly
   rougher joins than `generate` on the same text.
 
+## Kitten-ASR
+
+Kitten-ASR transcribes audio using PyTorch and is included in the base `pip install kittenml`
+installation. It runs on CUDA when available, or on CPU; pass `device="cpu"` to select CPU
+explicitly.
+
+| Model | Parameters | Download size | Output |
+|---|---|---|---|
+| [kitten-asr-tiny](https://huggingface.co/KittenML/kitten-asr-tiny) | 470M | 900 MB | Plain text |
+| [kitten-asr-small-enhanced](https://huggingface.co/KittenML/kitten-asr-small-enhanced) | 780M | 1.5 GB | Text with emotion, delivery, emphasis, and accent annotations |
+
+```python
+from kittenml import KittenASR
+
+asr = KittenASR("KittenML/kitten-asr-tiny")
+print(asr.transcribe("speech.wav"))
+
+# Get the detected language alongside the transcript.
+result = asr.transcribe_detailed("speech.wav")[0]
+print(result.language, result.text)
+```
+
+Inputs can be file paths, URLs, `(waveform, sample_rate)` tuples, or a list for batch
+transcription. Audio is converted to 16 kHz mono automatically, and long recordings are split
+into chunks before inference. Use `language="English"` to force a language, or `context` to
+provide names and terminology for the plain model.
+
+The enhanced model returns clean text plus annotations:
+
+```python
+asr = KittenASR("KittenML/kitten-asr-small-enhanced")
+result = asr.transcribe_detailed("speech.wav")[0]
+print(result.text)
+print(result.emotions, result.delivery, result.accent)
+print(result.word_annotations)
+```
+
+For the enhanced model, `context` supplies a reference transcript. These preview checkpoints
+focus on English and several European languages; see the [ASR guide](docs/kittenasr.md) for
+language coverage, batching, and long-audio options, and [enriched output](docs/enriched-output.md)
+for the annotation format. A fuller example is in [example_asr.py](example_asr.py).
+
 ## Documentation
 
 | | |
@@ -332,6 +379,8 @@ Two consequences worth knowing:
 | [Docker](docs/docker.md) | Run a basic OpenAI-compatible speech API, with voice cloning, in a container |
 | [Lightweight ONNX models](docs/onnx-models.md) | The CPU models, 15M-80M parameters, and their API |
 | [MLX on Apple silicon](docs/mlx.md) | The optional Mac GPU backend, and why it is faster |
+| [Kitten-ASR](docs/kittenasr.md) | Speech-to-text: models, API, and long-audio handling |
+| [Enriched output](docs/enriched-output.md) | Emotion, delivery, emphasis and accent from the enhanced ASR model |
 
 ## System Requirements
 

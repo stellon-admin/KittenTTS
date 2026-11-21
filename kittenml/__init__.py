@@ -15,6 +15,7 @@ __all__ = [
     "KittenTTS2",
     "KittenTTSOnnx",
     "KittenTTS2Tiny",
+    "KittenASR",
     "normalize_text",
     "normalize_text_result",
     "NormalizedSpan",
@@ -42,4 +43,10 @@ def __getattr__(name):
         from kittenml.kittentts_legacy import KittenTTSOnnx
 
         return KittenTTSOnnx
+    # Speech-to-text rather than speech synthesis, and it pulls in its own
+    # transformers architecture, so it stays out of the import path until asked for.
+    if name == "KittenASR":
+        from kittenml.kittenasr import KittenASR
+
+        return KittenASR
     raise AttributeError(f"module 'kittenml' has no attribute {name!r}")
