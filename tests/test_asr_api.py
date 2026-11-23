@@ -78,3 +78,20 @@ def test_auto_registration_is_idempotent():
     register_auto_classes()
     register_auto_classes()
     assert isinstance(AutoConfig.for_model("kitten_asr"), KittenASRConfig)
+
+
+def test_torch_registration_recovers_after_another_backend_registers_an_alias():
+    from transformers import AutoConfig, PretrainedConfig
+    from kittenml.kittenasr.auto import register_auto_classes
+    from kittenml.kittenasr.configuration import KittenASRConfig
+
+    class OtherBackendConfig(PretrainedConfig):
+        model_type = "kitten_asr"
+
+    register_auto_classes()
+    try:
+        AutoConfig.register("kitten_asr", OtherBackendConfig, exist_ok=True)
+        register_auto_classes()
+        assert isinstance(AutoConfig.for_model("kitten_asr"), KittenASRConfig)
+    finally:
+        AutoConfig.register("kitten_asr", KittenASRConfig, exist_ok=True)

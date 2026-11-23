@@ -331,6 +331,10 @@ Kitten-ASR transcribes audio using PyTorch and is included in the base `pip inst
 installation. It runs on CUDA when available, or on CPU; pass `device="cpu"` to select CPU
 explicitly.
 
+For GPU batching with vLLM, install `pip install 'kittenml[vllm]'` and select
+`KittenASR("KittenML/kitten-asr-tiny", backend="vllm")` on Linux with a CUDA GPU.
+See [ASR with vLLM](docs/kittenasr.md#running-with-vllm) for a complete example and engine settings.
+
 | Model | Parameters | Download size | Output |
 |---|---|---|---|
 | [kitten-asr-tiny](https://huggingface.co/KittenML/kitten-asr-tiny) | 470M | 900 MB | Plain text |

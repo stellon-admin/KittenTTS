@@ -146,6 +146,8 @@ class KittenASR:
         max_new_tokens=448,
         max_batch_size=8,
         enriched=None,
+        backend="torch",
+        vllm_options=None,
     ):
         """Initialize Kitten-ASR with a model from Hugging Face or a local directory.
 
@@ -161,15 +163,38 @@ class KittenASR:
             max_batch_size: How many chunks to run through the model at once.
             enriched: Whether this checkpoint emits enriched markup (emotion,
                 delivery, emphasis). Inferred from the model name by default.
+            backend: "torch" (default) or "vllm" for GPU inference.
+            vllm_options: Optional vLLM engine settings; see docs/kittenasr.md.
         """
+        if backend not in {"torch", "vllm"}:
+            raise ValueError("backend must be 'torch' or 'vllm'")
+        if backend != "vllm" and vllm_options is not None:
+            raise ValueError("vllm_options requires backend='vllm'")
+        self.backend = backend
+        self.max_new_tokens = max_new_tokens
+        self.max_batch_size = max_batch_size
+        model_path = _resolve_model_path(model_name)
+        self.enriched = _is_enriched_model(model_path) if enriched is None else bool(enriched)
+        if backend == "vllm":
+            from .vllm import VLLMBackend
+
+            self._vllm = VLLMBackend(
+                model_path, cache_dir=cache_dir, device=device, dtype=dtype,
+                options=vllm_options,
+            )
+            self.model = self._vllm.engine
+            self.processor = self._vllm.processor
+            self.device = self._vllm.device
+            self.dtype = self._vllm.dtype
+            self.quantized = False
+            return
+
         torch = _require_torch()
         from transformers import AutoProcessor
 
         from .auto import register_auto_classes
 
         register_auto_classes()
-
-        model_path = _resolve_model_path(model_name)
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -192,9 +217,6 @@ class KittenASR:
         self.processor = AutoProcessor.from_pretrained(
             model_path, cache_dir=cache_dir, fix_mistral_regex=True
         )
-        self.max_new_tokens = max_new_tokens
-        self.max_batch_size = max_batch_size
-        self.enriched = _is_enriched_model(model_path) if enriched is None else bool(enriched)
 
     @property
     def supported_languages(self) -> List[str]:
@@ -312,7 +334,12 @@ class KittenASR:
     def _generate(self, contexts, wavs, languages) -> List[str]:
         """Run the model over a list of chunks and return the raw decoded strings."""
         prompts = [self._build_prompt(c, lang) for c, lang in zip(contexts, languages)]
+        if not prompts:
+            return []
         batch_size = self.max_batch_size if self.max_batch_size and self.max_batch_size > 0 else len(prompts)
+
+        if self.backend == "vllm":
+            return self._vllm.generate(prompts, wavs, self.max_new_tokens, batch_size)
 
         outputs: List[str] = []
         for i in range(0, len(prompts), batch_size):

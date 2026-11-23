@@ -1,17 +1,11 @@
 """Registration of the Kitten-ASR architecture with the transformers Auto classes."""
 
-_REGISTERED = False
-
-
 def register_auto_classes():
     """Make `AutoModel`/`AutoProcessor` able to load a `kitten_asr` checkpoint.
 
-    Safe to call more than once; the first call does the work.
+    Reassert the mappings on each Torch load: vLLM can register its compatible
+    Qwen3-ASR config under the same checkpoint model_type in this process.
     """
-    global _REGISTERED
-    if _REGISTERED:
-        return
-
     from transformers import AutoConfig, AutoModel, AutoProcessor
 
     from .configuration import KittenASRConfig
@@ -21,5 +15,3 @@ def register_auto_classes():
     AutoConfig.register("kitten_asr", KittenASRConfig, exist_ok=True)
     AutoModel.register(KittenASRConfig, KittenASRForConditionalGeneration, exist_ok=True)
     AutoProcessor.register(KittenASRConfig, KittenASRProcessor, exist_ok=True)
-
-    _REGISTERED = True

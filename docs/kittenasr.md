@@ -4,8 +4,9 @@ Speech-to-text built on PyTorch. Needs nothing beyond the base install: torch an
 transformers already come with the package.
 
 - [Models](#models)
-- [Loading a model](#kittenasrmodel_name-cache_dirnone-devicenone-dtypenone-max_new_tokens448-max_batch_size8-enrichednone)
+- [Loading a model](#loading-a-model)
 - [Transcribing](#modeltranscribeaudio-context-languagenone-max_chunk_sec3000)
+- [Running with vLLM](#running-with-vllm)
 - [Detailed results](#modeltranscribe_detailed)
 - [Long audio](#long-audio)
 - [Quantized checkpoints](#quantized-checkpoints)
@@ -24,7 +25,10 @@ Japanese, Korean -- are not usable yet.
 
 For what the enhanced model adds, see [Enriched output](enriched-output.md).
 
-## `KittenASR(model_name, cache_dir=None, device=None, dtype=None, max_new_tokens=448, max_batch_size=8, enriched=None)`
+## Loading a model
+
+`KittenASR(model_name, cache_dir=None, device=None, dtype=None, max_new_tokens=448,
+max_batch_size=8, enriched=None, backend="torch", vllm_options=None)`
 
 Load a model from Hugging Face Hub or from a local directory.
 
@@ -37,6 +41,8 @@ Load a model from Hugging Face Hub or from a local directory.
 | `max_new_tokens` | `int` | `448` | Generation cap per audio chunk |
 | `max_batch_size` | `int` | `8` | How many chunks to run through the model at once |
 | `enriched` | `bool` | `None` | Whether the checkpoint emits enriched markup. Inferred from the model name by default |
+| `backend` | `str` | `"torch"` | `"torch"` for PyTorch inference, or `"vllm"` for GPU inference |
+| `vllm_options` | `dict` | `None` | Optional vLLM engine settings, described below |
 
 After loading, `model.quantized` says whether the checkpoint shipped packed low-bit weights,
 and `model.enriched` whether it emits markup.
@@ -92,6 +98,57 @@ print(result.language, result.text)
 ## `model.transcribe_file(audio_path, **kwargs)`
 
 Alias for `transcribe` on a single file.
+
+## Running with vLLM
+
+Install the optional backend on Linux with a CUDA GPU:
+
+```bash
+pip install 'kittenml[vllm]'
+```
+
+```python
+from kittenml import KittenASR
+
+def main():
+    model = KittenASR("KittenML/kitten-asr-tiny", backend="vllm")
+    print(model.transcribe(["speech.wav", "meeting.wav"]))
+
+if __name__ == "__main__":
+    main()
+```
+
+Keep the main guard because vLLM starts a worker process. Both the tiny and enhanced
+checkpoints use vLLM's native Qwen3-ASR implementation with their existing Hugging Face
+weights; no checkpoint conversion is needed. `cache_dir` controls the download cache.
+The same transcription methods, language/context arguments, chunking, and enriched result
+format work with either backend. Decoding is greedy; small numerical differences between
+engines can change the transcript.
+
+`dtype` accepts `torch.bfloat16`, `torch.float16`, or `torch.float32`. When omitted, vLLM
+uses bfloat16 if the GPU supports it, otherwise float16. Select GPUs using
+`CUDA_VISIBLE_DEVICES`, leaving `device` unset or set to `"cuda"`.
+
+Tune engine settings through `vllm_options`:
+
+```python
+model = KittenASR(
+    "KittenML/kitten-asr-small-enhanced",
+    backend="vllm",
+    vllm_options={"gpu_memory_utilization": 0.4, "max_num_seqs": 4},
+)
+```
+
+Defaults are `gpu_memory_utilization=0.25`, `max_model_len=8192`, and `max_num_seqs=8`.
+Other accepted options are `tensor_parallel_size`, `enforce_eager`,
+`max_num_batched_tokens`, `kv_cache_memory_bytes`, `enable_prefix_caching`, and `seed`.
+`max_batch_size` controls how many audio chunks each call submits; `max_num_seqs` controls
+vLLM's concurrent requests. The context window must fit the prompt, audio tokens, and
+`max_new_tokens`; reduce `max_chunk_sec` or increase `max_model_len` for longer recordings.
+Setting `enforce_eager=True` skips compilation and CUDA graph capture at startup.
+
+The packed low-bit checkpoint format described below is supported by the PyTorch backend
+only. The vLLM backend uses full-precision checkpoint weights.
 
 ## Long audio
 
