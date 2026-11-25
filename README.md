@@ -368,6 +368,11 @@ print(result.emotions, result.delivery, result.accent)
 print(result.word_annotations)
 ```
 
+Both enhanced models also come in smaller int8 and int4 downloads:
+`KittenASR("KittenML/kitten-asr-small-enhanced", quantization="int4")` is a 417 MB download in
+place of 1.5 GB. See [quantized checkpoints](docs/kittenasr.md#quantized-checkpoints) for sizes
+and accuracy.
+
 For the enhanced models, `context` supplies a reference transcript. These preview checkpoints
 focus on English and several European languages; see the [ASR guide](docs/kittenasr.md) for
 language coverage, batching, and long-audio options, and [enriched output](docs/enriched-output.md)

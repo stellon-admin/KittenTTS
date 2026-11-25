@@ -58,6 +58,12 @@ def _load_quantized_model(model_path, quantized_files, dtype, cache_dir):
 
     state = load_quantized_state_dict(*quantized_files, dtype=dtype)
     missing, unexpected = model.load_state_dict(state, strict=False)
+    # A tied weight (lm_head sharing the token embedding) is stored once; the
+    # load above already filled it through the tensor it shares.
+    model.tie_weights()
+    params = model.state_dict()
+    loaded = {params[name].data_ptr() for name in state if name in params}
+    missing = [name for name in missing if params[name].data_ptr() not in loaded]
     if missing:
         raise RuntimeError(
             f"Quantized checkpoint {model_path!r} is missing {len(missing)} weights, "
@@ -148,6 +154,7 @@ class KittenASR:
         enriched=None,
         backend="torch",
         vllm_options=None,
+        quantization=None,
     ):
         """Initialize Kitten-ASR with a model from Hugging Face or a local directory.
 
@@ -165,11 +172,17 @@ class KittenASR:
                 delivery, emphasis). Inferred from the model name by default.
             backend: "torch" (default) or "vllm" for GPU inference.
             vllm_options: Optional vLLM engine settings; see docs/kittenasr.md.
+            quantization: "int8" or "int4" to load that packed build from the
+                checkpoint's subfolder of the same name. None (default) loads the
+                full-precision weights, or packed weights stored at the root.
         """
         if backend not in {"torch", "vllm"}:
             raise ValueError("backend must be 'torch' or 'vllm'")
         if backend != "vllm" and vllm_options is not None:
             raise ValueError("vllm_options requires backend='vllm'")
+        if backend == "vllm" and quantization is not None:
+            raise ValueError("quantized builds require backend='torch'; "
+                             "vLLM runs the full-precision weights")
         self.backend = backend
         self.max_new_tokens = max_new_tokens
         self.max_batch_size = max_batch_size
@@ -204,7 +217,8 @@ class KittenASR:
             dtype = torch.bfloat16 if self.device.type == "cuda" else torch.float32
         self.dtype = dtype
 
-        quantized = find_quantized_files(model_path, cache_dir=cache_dir)
+        quantized = find_quantized_files(model_path, cache_dir=cache_dir,
+                                         quantization=quantization)
         self.quantized = quantized is not None
         if self.quantized:
             model = _load_quantized_model(model_path, quantized, dtype, cache_dir)

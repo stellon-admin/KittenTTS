@@ -19,27 +19,50 @@ QUANT_META_FILE = "quant_meta.json"
 QUANT_WEIGHTS_FILE = "quantized.safetensors"
 
 
-def find_quantized_files(model_path: str, cache_dir=None) -> Optional[Tuple[str, str]]:
+QUANTIZATIONS = ("int8", "int4")
+
+
+def find_quantized_files(
+    model_path: str, cache_dir=None, quantization: Optional[str] = None
+) -> Optional[Tuple[str, str]]:
     """Locate a checkpoint's quantized files, downloading them if it is on the Hub.
 
-    Returns `(meta_path, weights_path)`, or None when the checkpoint is not
-    quantized.
+    With `quantization` unset, looks for packed weights at the checkpoint's root
+    and returns None when there are none (a normal, full-precision checkpoint).
+    With `quantization="int8"` or `"int4"`, looks in that subfolder instead, so
+    one repository can carry several builds next to its full-precision weights;
+    a missing build is an error rather than a silent fallback.
+
+    Returns `(meta_path, weights_path)`, or None.
     """
+    if quantization is not None and quantization not in QUANTIZATIONS:
+        raise ValueError(f"quantization must be one of {QUANTIZATIONS} or None")
+    subfolder = quantization
+
     if os.path.isdir(model_path):
-        meta = os.path.join(model_path, QUANT_META_FILE)
-        weights = os.path.join(model_path, QUANT_WEIGHTS_FILE)
+        folder = os.path.join(model_path, subfolder) if subfolder else model_path
+        meta = os.path.join(folder, QUANT_META_FILE)
+        weights = os.path.join(folder, QUANT_WEIGHTS_FILE)
         if os.path.isfile(meta) and os.path.isfile(weights):
             return meta, weights
+        if subfolder:
+            raise FileNotFoundError(f"{model_path!r} has no {quantization} build in {folder!r}")
         return None
 
     from huggingface_hub import hf_hub_download
     from huggingface_hub.utils import EntryNotFoundError
 
     try:
-        meta = hf_hub_download(model_path, QUANT_META_FILE, cache_dir=cache_dir)
+        meta = hf_hub_download(model_path, QUANT_META_FILE, subfolder=subfolder,
+                               cache_dir=cache_dir)
     except EntryNotFoundError:
+        if subfolder:
+            raise FileNotFoundError(
+                f"{model_path!r} has no {quantization} build on the Hub"
+            ) from None
         return None  # a normal, unquantized repo
-    return meta, hf_hub_download(model_path, QUANT_WEIGHTS_FILE, cache_dir=cache_dir)
+    return meta, hf_hub_download(model_path, QUANT_WEIGHTS_FILE, subfolder=subfolder,
+                                 cache_dir=cache_dir)
 
 
 def unpack_bits(packed, bits: int, n_values: int):

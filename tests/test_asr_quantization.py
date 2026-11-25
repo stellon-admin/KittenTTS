@@ -107,6 +107,95 @@ class FindQuantizedFilesTests(unittest.TestCase):
             open(os.path.join(d, "quant_meta.json"), "w").close()
             self.assertIsNone(find_quantized_files(d))
 
+    def test_named_build_is_read_from_its_subfolder(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "int4"))
+            for name in ("quant_meta.json", "quantized.safetensors"):
+                open(os.path.join(d, "int4", name), "w").close()
+            self.assertIsNone(find_quantized_files(d))  # the root stays full precision
+            meta, weights = find_quantized_files(d, quantization="int4")
+            self.assertEqual(meta, os.path.join(d, "int4", "quant_meta.json"))
+            self.assertEqual(weights, os.path.join(d, "int4", "quantized.safetensors"))
+            with self.assertRaises(FileNotFoundError):
+                find_quantized_files(d, quantization="int8")
+
+    def test_unknown_build_is_rejected(self):
+        with self.assertRaises(ValueError):
+            find_quantized_files("KittenML/x", quantization="int2")
+
+    def test_named_build_is_downloaded_from_the_hub_subfolder(self):
+        from unittest import mock
+
+        from huggingface_hub.utils import EntryNotFoundError
+
+        calls = []
+
+        def fake_download(repo, filename, subfolder=None, cache_dir=None):
+            calls.append((repo, filename, subfolder, cache_dir))
+            if subfolder == "int8":
+                raise EntryNotFoundError("missing")
+            return f"/cache/{subfolder}/{filename}"
+
+        with mock.patch("huggingface_hub.hf_hub_download", fake_download):
+            found = find_quantized_files("KittenML/m", cache_dir="/c", quantization="int4")
+            self.assertEqual(found, ("/cache/int4/quant_meta.json",
+                                     "/cache/int4/quantized.safetensors"))
+            self.assertEqual(calls[0], ("KittenML/m", "quant_meta.json", "int4", "/c"))
+            with self.assertRaises(FileNotFoundError):
+                find_quantized_files("KittenML/m", quantization="int8")
+
+
+@unittest.skipIf(torch is None, "requires torch")
+class TiedWeightTests(unittest.TestCase):
+    def test_lm_head_tied_to_embedding_may_be_stored_once(self):
+        from unittest import mock
+
+        from kittenml.kittenasr import get_model as gm
+
+        class Tied(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.embed = torch.nn.Embedding(4, 2)
+                self.lm_head = torch.nn.Linear(2, 4, bias=False)
+
+            def tie_weights(self):
+                self.lm_head.weight = self.embed.weight
+
+            def to(self, *args, **kwargs):
+                return self
+
+        weight = torch.arange(8.0).reshape(4, 2)
+        with mock.patch("transformers.AutoConfig.from_pretrained"), \
+                mock.patch("transformers.AutoModel.from_config", return_value=Tied()), \
+                mock.patch.object(gm, "load_quantized_state_dict",
+                                  return_value={"embed.weight": weight}):
+            model = gm._load_quantized_model("m", ("meta", "w"), torch.float32, None)
+        self.assertTrue(torch.equal(model.lm_head.weight, weight))
+
+    def test_weight_genuinely_absent_still_fails(self):
+        from unittest import mock
+
+        from kittenml.kittenasr import get_model as gm
+
+        class Untied(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.a = torch.nn.Linear(2, 2, bias=False)
+                self.b = torch.nn.Linear(2, 2, bias=False)
+
+            def tie_weights(self):
+                pass
+
+            def to(self, *args, **kwargs):
+                return self
+
+        with mock.patch("transformers.AutoConfig.from_pretrained"), \
+                mock.patch("transformers.AutoModel.from_config", return_value=Untied()), \
+                mock.patch.object(gm, "load_quantized_state_dict",
+                                  return_value={"a.weight": torch.zeros(2, 2)}):
+            with self.assertRaises(RuntimeError):
+                gm._load_quantized_model("m", ("meta", "w"), torch.float32, None)
+
 
 if __name__ == "__main__":
     unittest.main()

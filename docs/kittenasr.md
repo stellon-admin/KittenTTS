@@ -29,7 +29,7 @@ For what the enhanced models add, see [Enriched output](enriched-output.md).
 ## Loading a model
 
 `KittenASR(model_name, cache_dir=None, device=None, dtype=None, max_new_tokens=448,
-max_batch_size=8, enriched=None, backend="torch", vllm_options=None)`
+max_batch_size=8, enriched=None, backend="torch", vllm_options=None, quantization=None)`
 
 Load a model from Hugging Face Hub or from a local directory.
 
@@ -44,6 +44,7 @@ Load a model from Hugging Face Hub or from a local directory.
 | `enriched` | `bool` | `None` | Whether the checkpoint emits enriched markup. Inferred from the model name by default |
 | `backend` | `str` | `"torch"` | `"torch"` for PyTorch inference, or `"vllm"` for GPU inference |
 | `vllm_options` | `dict` | `None` | Optional vLLM engine settings, described below |
+| `quantization` | `str` | `None` | `"int8"` or `"int4"` to load a [quantized build](#quantized-checkpoints) of the enhanced models |
 
 After loading, `model.quantized` says whether the checkpoint shipped packed low-bit weights,
 and `model.enriched` whether it emits markup.
@@ -164,29 +165,53 @@ comma-separated list in the order the languages appear.
 
 ## Quantized checkpoints
 
-Kitten-ASR can load a checkpoint quantized to 4 bits with a group size of 128, which is
-roughly a 250 MB download in place of 900 MB. No such checkpoint is published yet, so this
-describes the format rather than something you can download today. Nothing changes at the
-call site:
+Both enhanced models also ship int8 and int4 builds, in the `int8/` and `int4/` subfolders of
+their repositories. Pick one with `quantization`; nothing else changes at the call site:
 
 ```python
-model = KittenASR("KittenML/kitten-asr-tiny-int4")   # when one is published
-model.transcribe("speech.wav")
+model = KittenASR("KittenML/kitten-asr-small-enhanced", quantization="int4")
+model.transcribe_detailed("speech.wav")[0].enriched_text
 ```
 
-Kitten-ASR recognizes such a checkpoint by the `quant_meta.json` and `quantized.safetensors` it
-ships in place of `model.safetensors`, unpacks the weights on load, and sets `model.quantized`
-to `True`.
+| Model | bf16 | int8 | int4 |
+|---|---|---|---|
+| kitten-asr-small-enhanced | 1.5 GB | 785 MB | 417 MB |
+| kitten-asr-medium-enhanced | 4.1 GB | 2.0 GB | 1.1 GB |
+
+Only the packed weights are downloaded; the config and tokenizer come from the repository root.
 
 What this buys you is **download and disk size, not memory**. The weights are expanded back to
 bfloat16 (float32 on CPU) as they load, so the running model occupies exactly as much as the
-unquantized one. Loading costs a few seconds more than a plain checkpoint, since the weights
-have to be unpacked.
+unquantized one, and loading takes a few seconds longer. The packed builds run on the PyTorch
+backend only; `backend="vllm"` with `quantization` raises an error.
 
-On 25 LibriSpeech test-clean samples the quantized model scored 4.21% WER against 3.82% for the
-full-precision one, and produced identical text on 14 of them -- the rest differed mostly in
-punctuation and proper-noun spelling. That is a small sample, indicative rather than a
-benchmark.
+Measured on 1000 held-out emotive and accented clips against the full-precision model:
+
+| Build | WER vs reference | Tag F1 vs bf16 | Same accent as bf16 |
+|---|---|---|---|
+| small bf16 | 12.29% | -- | -- |
+| small int8 | 12.37% | 0.950 | 98.4% |
+| small int4 | 12.55% | 0.875 | 96.4% |
+| medium bf16 | 11.03% | -- | -- |
+| medium int8 | 11.05% | 0.933 | 99.5% |
+| medium int4 | 11.22% | 0.882 | 98.9% |
+
+For reference, the bf16 model run at a different batch size agrees with itself at a tag F1 of
+about 0.96, since greedy decoding is not bit-exact across batch shapes. int8 is close to the
+original. int4 keeps the words but changes the markup more often -- usually which emotion or
+delivery tag is chosen, emphasis strength, or pause length -- and is weakest on accented
+speech, so prefer int8 or medium int4 when the accent label matters.
+
+The int8 builds are GPTQ with one scale and zero point per output row. The int4 builds are
+GPTQ with a group size of 128, followed by quantization-aware distillation from the
+full-precision model. Everything except norms and biases is quantized, including the audio
+encoder and the token embedding. That embedding is tied to `lm_head`, so it is stored once
+and the loader re-ties it.
+
+The format is `quantized.safetensors` (packed integers plus fp16 scales and zero points per
+group) with a `quant_meta.json` describing each tensor. A checkpoint that keeps these two files
+at its root instead of `model.safetensors` loads without `quantization`. After loading,
+`model.quantized` is `True`.
 
 If you need the weights to stay packed in memory as well, convert to GGUF and run under
 llama.cpp; this loader is for keeping the download small.
