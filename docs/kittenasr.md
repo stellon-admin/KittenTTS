@@ -18,12 +18,13 @@ transformers already come with the package.
 |---|---|---|---|---|
 | kitten-asr-tiny | 470M | 900 MB | Plain text | [KittenML/kitten-asr-tiny](https://huggingface.co/KittenML/kitten-asr-tiny) |
 | kitten-asr-small-enhanced | 780M | 1.5 GB | Enriched markup | [KittenML/kitten-asr-small-enhanced](https://huggingface.co/KittenML/kitten-asr-small-enhanced) |
+| kitten-asr-medium-enhanced | 2.0B | 4.1 GB | Enriched markup | [KittenML/kitten-asr-medium-enhanced](https://huggingface.co/KittenML/kitten-asr-medium-enhanced) |
 
 These preview checkpoints transcribe English well, and handle French, German, Spanish, Italian,
 Dutch, Polish, Portuguese, and Russian. Languages in other scripts -- Arabic, Chinese, Hindi,
 Japanese, Korean -- are not usable yet.
 
-For what the enhanced model adds, see [Enriched output](enriched-output.md).
+For what the enhanced models add, see [Enriched output](enriched-output.md).
 
 ## Loading a model
 
@@ -68,7 +69,7 @@ Audio is resampled to 16 kHz mono automatically, whatever the source rate or cha
 `context` and `language` are broadcast over a batch when given as a scalar, or supplied
 per-item as a list.
 
-On the enhanced checkpoint, `context` is the reference transcript rather than a free-form
+On the enhanced checkpoints, `context` is the reference transcript rather than a free-form
 biasing prompt -- see [Enriched output](enriched-output.md).
 
 ## `model.transcribe_detailed`
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Keep the main guard because vLLM starts a worker process. Both the tiny and enhanced
+Keep the main guard because vLLM starts a worker process. All three
 checkpoints use vLLM's native Qwen3-ASR implementation with their existing Hugging Face
 weights; no checkpoint conversion is needed. `cache_dir` controls the download cache.
 The same transcription methods, language/context arguments, chunking, and enriched result

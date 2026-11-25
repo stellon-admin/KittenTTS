@@ -1,6 +1,7 @@
 # Enriched output
 
-`KittenML/kitten-asr-small-enhanced` is trained to emit inline markup instead of plain text:
+`KittenML/kitten-asr-small-enhanced` and the larger `KittenML/kitten-asr-medium-enhanced` are
+trained to emit inline markup instead of plain text:
 
 ```
 [Happy]Congratulations were (poured) in upon the princess.[/Happy] [Accent='other-english']
@@ -34,7 +35,7 @@ result.word_annotations # per word: emotion, delivery, emphasis level, non-verba
 result.to_dict()        # the full JSON schema below
 ```
 
-`transcribe()` returns the plain text here too, so the enhanced model is a drop-in swap for the
+`transcribe()` returns the plain text here too, so the enhanced models are a drop-in swap for the
 plain checkpoints.
 
 Pass `enriched=True` or `enriched=False` to `KittenASR(...)` to override the name-based

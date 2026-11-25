@@ -33,7 +33,7 @@
 The library also includes our existing [**lightweight V0.8 models**](docs/onnx-models.md). Both model families load through the same `KittenTTS(...)` constructor.
 
 The same package includes [**Kitten-ASR**](#kitten-asr) for speech-to-text on CPU or GPU,
-with plain transcription and an enhanced model that also reports emotion, delivery, emphasis,
+with plain transcription and enhanced models that also report emotion, delivery, emphasis,
 and accent.
 
 **Commercial support is available.** For integration assistance, custom voices, or enterprise licensing, [contact us](https://docs.google.com/forms/d/e/1FAIpQLSc49erSr7jmh3H2yeqH4oZyRRuXm0ROuQdOgWguTzx6SMdUnQ/viewform?usp=preview).
@@ -339,6 +339,7 @@ See [ASR with vLLM](docs/kittenasr.md#running-with-vllm) for a complete example 
 |---|---|---|---|
 | [kitten-asr-tiny](https://huggingface.co/KittenML/kitten-asr-tiny) | 470M | 900 MB | Plain text |
 | [kitten-asr-small-enhanced](https://huggingface.co/KittenML/kitten-asr-small-enhanced) | 780M | 1.5 GB | Text with emotion, delivery, emphasis, and accent annotations |
+| [kitten-asr-medium-enhanced](https://huggingface.co/KittenML/kitten-asr-medium-enhanced) | 2.0B | 4.1 GB | Same annotations as small-enhanced, from a larger model |
 
 ```python
 from kittenml import KittenASR
@@ -356,7 +357,8 @@ transcription. Audio is converted to 16 kHz mono automatically, and long recordi
 into chunks before inference. Use `language="English"` to force a language, or `context` to
 provide names and terminology for the plain model.
 
-The enhanced model returns clean text plus annotations:
+The enhanced models return clean text plus annotations. Swap in
+`KittenML/kitten-asr-medium-enhanced` for the larger model; the API is the same:
 
 ```python
 asr = KittenASR("KittenML/kitten-asr-small-enhanced")
@@ -366,7 +368,7 @@ print(result.emotions, result.delivery, result.accent)
 print(result.word_annotations)
 ```
 
-For the enhanced model, `context` supplies a reference transcript. These preview checkpoints
+For the enhanced models, `context` supplies a reference transcript. These preview checkpoints
 focus on English and several European languages; see the [ASR guide](docs/kittenasr.md) for
 language coverage, batching, and long-audio options, and [enriched output](docs/enriched-output.md)
 for the annotation format. A fuller example is in [example_asr.py](example_asr.py).

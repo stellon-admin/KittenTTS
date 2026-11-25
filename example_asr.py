@@ -32,6 +32,7 @@ print(f"[{result.language}] {result.text}")
 
 # The enhanced model also reports emotion, delivery, emphasis, and accent.
 enhanced = KittenASR("KittenML/kitten-asr-small-enhanced")
+# enhanced = KittenASR("KittenML/kitten-asr-medium-enhanced")  # larger, same API
 result = enhanced.transcribe_detailed("output.wav")[0]
 
 print(result.text)           # markup stripped
